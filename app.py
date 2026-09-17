@@ -14,17 +14,6 @@ morph = pymorphy3.MorphAnalyzer()
 RHYME_BRAIN_URL = "https://rhymebrain.com/talk"
 
 
-# Части речи, которые обычно дают мусор
-# для обычного списка рифм.
-BAD_POS = {
-    "PRCL",   # частица
-    "CONJ",   # союз
-    "PREP",   # предлог
-    "INTJ",   # междометие
-    "PRED",   # предикатив
-}
-
-
 @app.route("/rhymes", methods=["GET"])
 def rhymes():
 
@@ -79,77 +68,71 @@ def rhymes():
             .lower()
         )
 
+
         if not candidate:
             continue
 
 
-        # Само исходное слово не показываем
         if candidate == word:
-            continue
-
-
-        # Только кириллица
-        if not all(
-            "а" <= char <= "я" or char == "ё"
-            for char in candidate
-        ):
-            continue
-
-
-        # Слишком короткие формы почти всегда мусор
-        if len(candidate) < 3:
             continue
 
 
         if candidate in seen:
             continue
 
+
         seen.add(candidate)
 
 
-        # Морфологический разбор
-        parses = morph.parse(candidate)
-
-        if not parses:
+        # Только кириллица
+        if not all(
+            ("а" <= char <= "я") or char == "ё"
+            for char in candidate
+        ):
             continue
 
 
-        best = max(
-            parses,
-            key=lambda p: p.score
+        # Отсекаем совсем короткие технические формы.
+        # 3 буквы и больше оставляем.
+        if len(candidate) < 3:
+            continue
+
+
+        # Морфология используется только
+        # как дополнительная информация,
+        # а НЕ как жёсткий фильтр.
+        parses = morph.parse(candidate)
+
+
+        best = None
+
+        if parses:
+            best = max(
+                parses,
+                key=lambda p: p.score
+            )
+
+
+        morph_score = (
+            best.score
+            if best
+            else 0
         )
 
 
-        # Слабые морфологические разборы отбрасываем
-        if best.score < 0.7:
-            continue
+        pos = (
+            best.tag.POS
+            if best
+            else None
+        )
 
 
-        pos = best.tag.POS
-
-
-        # Служебные части речи убираем,
-        # но НЕТ фильтра "только существительные"
-        if pos in BAD_POS:
-            continue
-
-
-        # Если pymorphy вообще не определил часть речи,
-        # это обычно подозрительный кандидат
-        if pos is None:
-            continue
-
-
+        # Частотность только для сортировки.
+        # Ничего по ней не отбрасываем.
         frequency = zipf_frequency(
             candidate,
             "ru"
         )
-
-
-        # Дополнительный фильтр частотности.
-        # Не используем его как главный критерий.
-        if frequency < 3.0:
-            continue
 
 
         result.append({
@@ -159,13 +142,14 @@ def rhymes():
                 0
             ),
             "frequency": frequency,
-            "morph_score": best.score,
+            "morph_score": morph_score,
             "pos": pos
         })
 
 
-    # Сначала качество рифмы,
-    # затем нормальность/частотность слова
+    # Главный критерий — качество рифмы.
+    # Частотность используется только как
+    # дополнительный критерий.
     result.sort(
         key=lambda item: (
             item["score"],
@@ -185,6 +169,7 @@ def analyze():
         "word",
         ""
     ).strip().lower()
+
 
     if not word:
         return jsonify({
