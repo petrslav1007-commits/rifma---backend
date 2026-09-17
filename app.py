@@ -1,8 +1,9 @@
 import pymorphy3
 import requests
-from wordfreq import zipf_frequency
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from wordfreq import zipf_frequency
 
 
 app = Flask(__name__)
@@ -10,10 +11,7 @@ CORS(app)
 
 morph = pymorphy3.MorphAnalyzer()
 
-
-RHYME_BRAIN_URL = (
-    "https://rhymebrain.com/talk"
-)
+RHYME_BRAIN_URL = "https://rhymebrain.com/talk"
 
 
 @app.route("/rhymes", methods=["GET"])
@@ -28,7 +26,6 @@ def rhymes():
         return jsonify({
             "error": "word is required"
         }), 400
-
 
     try:
 
@@ -46,7 +43,6 @@ def rhymes():
         response.raise_for_status()
 
         data = response.json()
-
 
     except Exception as error:
 
@@ -72,26 +68,20 @@ def rhymes():
             .lower()
         )
 
-
         if not candidate:
             continue
-
 
         if candidate == word:
             continue
 
-
         if candidate in seen:
             continue
-
 
         seen.add(candidate)
 
 
-        parses = morph.parse(
-            candidate
-        )
-
+        # Проверяем, что слово существует
+        parses = morph.parse(candidate)
 
         if not parses:
             continue
@@ -103,7 +93,19 @@ def rhymes():
         )
 
 
+        # Отбрасываем совсем слабые разборы
         if best.score < 0.3:
+            continue
+
+
+        # Проверяем частотность русского слова
+        frequency = zipf_frequency(
+            candidate,
+            "ru"
+        )
+
+        # Отсекаем откровенный мусор
+        if frequency < 3.0:
             continue
 
 
@@ -113,15 +115,18 @@ def rhymes():
                 "score",
                 0
             ),
+            "frequency": frequency,
             "morph_score": best.score,
             "pos": best.tag.POS
         })
 
 
+    # Сначала качество рифмы,
+    # затем частотность слова
     result.sort(
         key=lambda item: (
             item["score"],
-            item["morph_score"]
+            item["frequency"]
         ),
         reverse=True
     )
@@ -138,7 +143,6 @@ def analyze():
         ""
     ).strip().lower()
 
-
     if not word:
         return jsonify({
             "error": "word is required"
@@ -146,7 +150,6 @@ def analyze():
 
 
     parses = morph.parse(word)
-
 
     result = []
 
