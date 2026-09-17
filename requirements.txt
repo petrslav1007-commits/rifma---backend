@@ -2,3 +2,4 @@ flask
 flask-cors
 pymorphy3
 gunicorn
+requests
