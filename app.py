@@ -14,6 +14,17 @@ morph = pymorphy3.MorphAnalyzer()
 RHYME_BRAIN_URL = "https://rhymebrain.com/talk"
 
 
+# Части речи, которые обычно дают мусор
+# для обычного списка рифм.
+BAD_POS = {
+    "PRCL",   # частица
+    "CONJ",   # союз
+    "PREP",   # предлог
+    "INTJ",   # междометие
+    "PRED",   # предикатив
+}
+
+
 @app.route("/rhymes", methods=["GET"])
 def rhymes():
 
@@ -71,8 +82,24 @@ def rhymes():
         if not candidate:
             continue
 
+
+        # Само исходное слово не показываем
         if candidate == word:
             continue
+
+
+        # Только кириллица
+        if not all(
+            "а" <= char <= "я" or char == "ё"
+            for char in candidate
+        ):
+            continue
+
+
+        # Слишком короткие формы почти всегда мусор
+        if len(candidate) < 3:
+            continue
+
 
         if candidate in seen:
             continue
@@ -80,7 +107,7 @@ def rhymes():
         seen.add(candidate)
 
 
-        # Проверяем, что слово существует
+        # Морфологический разбор
         parses = morph.parse(candidate)
 
         if not parses:
@@ -93,18 +120,34 @@ def rhymes():
         )
 
 
-        # Отбрасываем совсем слабые разборы
-        if best.score < 0.3:
+        # Слабые морфологические разборы отбрасываем
+        if best.score < 0.7:
             continue
 
 
-        # Проверяем частотность русского слова
+        pos = best.tag.POS
+
+
+        # Служебные части речи убираем,
+        # но НЕТ фильтра "только существительные"
+        if pos in BAD_POS:
+            continue
+
+
+        # Если pymorphy вообще не определил часть речи,
+        # это обычно подозрительный кандидат
+        if pos is None:
+            continue
+
+
         frequency = zipf_frequency(
             candidate,
             "ru"
         )
 
-        # Отсекаем откровенный мусор
+
+        # Дополнительный фильтр частотности.
+        # Не используем его как главный критерий.
         if frequency < 3.0:
             continue
 
@@ -117,12 +160,12 @@ def rhymes():
             ),
             "frequency": frequency,
             "morph_score": best.score,
-            "pos": best.tag.POS
+            "pos": pos
         })
 
 
     # Сначала качество рифмы,
-    # затем частотность слова
+    # затем нормальность/частотность слова
     result.sort(
         key=lambda item: (
             item["score"],
