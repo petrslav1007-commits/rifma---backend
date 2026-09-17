@@ -3,3 +3,4 @@ flask-cors
 pymorphy3
 gunicorn
 requests
+wordfreq
