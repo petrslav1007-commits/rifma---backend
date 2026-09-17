@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import pymorphy2
+import pymorphy3
 
 app = Flask(__name__)
 CORS(app)
 
-morph = pymorphy2.MorphAnalyzer()
+morph = pymorphy3.MorphAnalyzer()
 
 
 @app.route("/analyze", methods=["GET"])
