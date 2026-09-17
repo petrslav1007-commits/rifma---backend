@@ -1,6 +1,6 @@
 import pymorphy3
 import requests
-
+from wordfreq import zipf_frequency
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
